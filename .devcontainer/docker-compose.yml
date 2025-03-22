@@ -1,0 +1,8 @@
+services:
+  rpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - ../:/app/

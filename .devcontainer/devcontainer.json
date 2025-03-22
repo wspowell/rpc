@@ -1,0 +1,77 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.155.1/containers/docker-existing-docker-compose
+// If you want to run as a non-root user in the container, see .devcontainer/docker-compose.yml.
+{
+    "name": "rpc",
+    // Update the 'dockerComposeFile' list if you have more compose files or use different names.
+    // The .devcontainer/docker-compose.yml file contains any overrides you need/want to make.
+    "dockerComposeFile": [
+        "./docker-compose.yml"
+    ],
+    // The 'service' property is the name of the service for the container that VS Code should
+    // use. Update this value and .devcontainer/docker-compose.yml to the real service name.
+    "service": "rpc",
+    // The optional 'workspaceFolder' property is the path VS Code should open by default when
+    // connected. This is typically a file mount in .devcontainer/docker-compose.yml
+    "workspaceFolder": "/app/",
+    // Set *default* container specific settings.json values on container create.
+    "customizations": {
+        "vscode": {
+            // Set *default* container specific settings.json values on container create.
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "sh",
+                "go.lintTool": "golangci-lint",
+                "go.formatTool": "gofumpt",
+                "gopls": {
+                    "formatting.gofumpt": true,
+                    "ui.documentation.linksInHover": true,
+                    "ui.codelenses": {
+                        "run_govulncheck": true
+                    }
+                },
+                "todohighlight.keywordsPattern": "(TODO|FIXME)(:|\\s)|(TODO|FIXME)\\([a-zA-z0-9]*\\)(:|\\s)|SPARK-[0-9]+",
+                "todohighlight.isCaseSensitive": false,
+                "todohighlight.defaultStyle": {
+                    "backgroundColor": "#eb4034",
+                    "color": "white",
+                    "overviewRulerColor": "#eb4034"
+                },
+                "errorLens.exclude": [".*: Unknown word\\."],
+                "cSpell.checkOnlyEnabledFileTypes": true,
+                "cSpell.enableFileTypes": ["go"],
+                "gitlens.hovers.currentLine.over": "line",
+                "gitlens.modes": {
+                    "develop": {
+                        "name": "Develop",
+                        "statusBarItemName": "Developing",
+                        "description": "for a zen-like experience, disables many visual features",
+                        "codeLens": false,
+                        "currentLine": false,
+                        "hovers": false,
+                        "statusBar": false
+                    },
+                    "review": {
+                        "name": "Review",
+                        "statusBarItemName": "Reviewing",
+                        "description": "for reviewing code, enables many visual features",
+                        "codeLens": true,
+                        "currentLine": true,
+                        "hovers": true
+                    }
+                },
+                "gitlens.mode.active": "Develop"
+            },
+            // Add the IDs of extensions you want installed when the container is created.
+            "extensions": [
+                "golang.go",
+                "wayou.vscode-todo-highlight",
+                "mutantdino.resourcemonitor",
+                "streetsidesoftware.code-spell-checker",
+                "usernamehw.errorlens",
+                "ms-vsliveshare.vsliveshare",
+                "eamodio.gitlens",
+                "ms-vscode.makefile-tools"
+            ]
+        }
+    }
+}

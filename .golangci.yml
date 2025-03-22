@@ -217,105 +217,111 @@ linters:
     - asciicheck
     - bidichk
     - bodyclose
+    - canonicalheader
     - containedctx
     - contextcheck
-    # - cyclop
-    # - deadcode # WARN [runner] The linter 'deadcode' is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused. 
-    # - decorder # Encourages poor code organization.
+    - copyloopvar
+    - cyclop
+    - decorder
     - depguard
     - dogsled
-    # - dupl # Might be useful but have not seen value.
+    - dupl
     - dupword
     - durationcheck
+    - err113
     - errcheck
     - errchkjson
     - errname
     - errorlint
-    - execinquery
     - exhaustive
-    # - exhaustivestruct # WARN [runner] The linter 'exhaustivestruct' is deprecated (since v1.46.0) due to: The owner seems to have abandoned the linter.  Replaced by exhaustruct.
     - exhaustruct
-    - exportloopref
+    - exptostd
+    - fatcontext
     - forbidigo
     - forcetypeassert
-    # - funlen # Not entirely useful. It is always good to keep function length short but this is just an arbitrary length and not something we can make a good rule for.
-    - gci # FIXME: Could never figure out why this error sometimes breaks the linter: can't run linter gci: gci: 5:30: expected ';', found
+    - funlen
+    - gci
+    - ginkgolinter
     - gocheckcompilerdirectives
     - gochecknoglobals
     - gochecknoinits
-    # - gocognit
+    - gochecksumtype
+    - gocognit
     - goconst
-    - gocritic # FIXME: Temporarily disable due to bug in gocritic - ERRO Running error: 1 error occurred: * can't run linter goanalysis_metalinter: goanalysis_metalinter: gocritic: package "errors" (isInitialPkg: true, needAnalyzeSource: true): go/types/sizes.go:82: assertion failed
-    # - gocyclo
-    # - godot # More annoying than helpful.
-    # - godox
-    - goerr113
-    # - gofmt
-    # - gofumpt
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gofmt
+    - gofumpt
     - goheader
-    # - goimports # Should probably use gci instead.
-    # - golint # WARN [runner] The linter 'golint' is deprecated (since v1.41.0) due to: The repository of the linter has been archived by the owner.  Replaced by revive.
-    - gomnd
-    # - gomoddirectives # FIXME: Disable this because of gitlab's issue where we have to use the replace directive.
+    - goimports
+    - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
     - gosimple
+    - gosmopolitan
     - govet
     - grouper
-    # - ifshort # WARN [runner] The linter 'ifshort' is deprecated (since v1.48.0) due to: The repository of the linter has been deprecated by the owner.
-    # - importas
+    - iface
+    - importas
+    - inamedparam
     - ineffassign
-    # - interfacebloat
-    # - interfacer # WARN [runner] The linter 'interfacer' is deprecated (since v1.38.0) due to: The repository of the linter has been archived by the owner.  
+    - interfacebloat
+    - intrange
     - ireturn
-    # - lll
+    #- lll
     - loggercheck
-    # - maintidx
+    - maintidx
     - makezero
-    # - maligned # WARN [runner] The linter 'maligned' is deprecated (since v1.38.0) due to: The repository of the linter has been archived by the owner.  Replaced by govet 'fieldalignment'.
+    - mirror
     - misspell
+    - mnd
     - musttag
     - nakedret
-    # - nestif
+    - nestif
     - nilerr
+    - nilnesserr
     - nilnil
-    # - nlreturn
+    - nlreturn
     - noctx
     - nolintlint
     - nonamedreturns
-    # - nosnakecase # WARN [runner] The linter 'nosnakecase' is deprecated (since v1.48.1) due to: The repository of the linter has been deprecated by the owner.  Replaced by revive(var-naming).
     - nosprintfhostport
     - paralleltest
+    - perfsprint
     - prealloc
     - predeclared
     - promlinter
+    - protogetter
     - reassign
+    - recvcheck
     - revive
-    - rowserrcheck # WARN [linters_context] rowserrcheck is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649. 
-    # - scopelint # WARN [runner] The linter 'scopelint' is deprecated (since v1.39.0) due to: The repository of the linter has been deprecated by the owner.  Replaced by exportloopref.
+    - rowserrcheck
+    - sloglint
+    - spancheck
     - sqlclosecheck
     - staticcheck
-    # - structcheck # WARN [runner] The linter 'structcheck' is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused. 
     - stylecheck
     - tagalign
-    # - tagliatelle
-    - tenv
+    - tagliatelle
     - testableexamples
+    - testifylint
     - testpackage
     - thelper
     - tparallel
-    - typecheck
     - unconvert
     - unparam
     - unused
     - usestdlibvars
-    # - varcheck # WARN [runner] The linter 'varcheck' is deprecated (since v1.49.0) due to: The owner seems to have abandoned the linter.  Replaced by unused. 
-    # - varnamelen
-    - wastedassign # WARN [linters_context] wastedassign is disabled because of generics. You can track the evolution of the generics support by following the https://github.com/golangci/golangci-lint/issues/2649.
+    - usetesting
+    - varnamelen
+    - wastedassign
     - whitespace
-    - wrapcheck
-    # - wsl
+    # - wrapcheck
+    - wsl
+    - zerologlint
 
 linters-settings:
 
@@ -324,33 +330,47 @@ linters-settings:
     #
     # Variables:
     # - File Variables
-    #   you can still use and exclamation mark ! in front of a variable to say not to use it.
-    #   Example !$test will match any file that is not a go test file.
+    #   Use an exclamation mark `!` to negate a variable.
+    #   Example: `!$test` matches any file that is not a go test file.
     #
     #   `$all` - matches all go files
     #   `$test` - matches all go test files
     #
     # - Package Variables
     #
-    #  `$gostd` - matches all of go's standard library (Pulled from `GOROOT`)
+    #   `$gostd` - matches all of go's standard library (Pulled from `GOROOT`)
     #
-    # Default: Only allow $gostd in all files.
+    # Default (applies if no custom rules are defined): Only allow $gostd in all files.
     rules:
       # Name of a rule.
-      library_replacements:
+      main:
+        # Defines package matching behavior. Available modes:
+        # - `original`: allowed if it doesn't match the deny list and either matches the allow list or the allow list is empty.
+        # - `strict`: allowed only if it matches the allow list and either doesn't match the deny list or the allow rule is more specific (longer) than the deny rule.
+        # - `lax`: allowed if it doesn't match the deny list or the allow rule is more specific (longer) than the deny rule.
+        # Default: "original"
+        list-mode: lax
         # List of file globs that will match this list of settings to compare against.
         # Default: $all
         # files:
         #   - "!**/*_a _file.go"
         # List of allowed packages.
-        # allow:
+        # Entries can be a variable (starting with $), a string prefix, or an exact match (if ending with $).
+        # Default: []
+        allow:
+          - $all
         #   - $gostd
         #   - github.com/OpenPeeDeeP
-        # Packages that are not allowed where the value is a suggestion.
-        deny:
-          - pkg: "errors"
-            desc: "replace with diskey/pkg/errors"
-
+        # List of packages that are not allowed.
+        # Entries can be a variable (starting with $), a string prefix, or an exact match (if ending with $).
+        # Default: []
+        # deny:
+        #   - pkg: "math/rand$"
+        #     desc: use math/rand/v2
+        #   - pkg: "github.com/sirupsen/logrus"
+        #     desc: not allowed
+        #   - pkg: "github.com/pkg/errors"
+        #     desc: Should be replaced by standard lib errors package
 
   dogsled:
     # Checks assignments with too many blank identifiers.
@@ -426,7 +446,7 @@ linters-settings:
     sections: 
       - standard # Standard section: captures all standard packages.
       - default # Default section: contains all imports that could not be matched to another section type.
-      - prefix(diskey/)
+      - prefix(github.com/wspowell/rpc)
       # - prefix() # Custom section: groups all imports with the specified Prefix.
       # - blank # Blank section: contains all blank imports. This section is not present unless explicitly enabled.
       # - dot # Dot section: contains all dot imports. This section is not present unless explicitly enabled.
@@ -610,7 +630,7 @@ linters-settings:
   govet:
     # Report about shadowed variables.
     # Default: false
-    check-shadowing: true
+    # check-shadowing: true
     # Settings per analyzer.
     settings:
       # Analyzer name, run `go tool vet help` to see all analyzers.
@@ -1216,52 +1236,39 @@ linters-settings:
     # Default: false
     check-exported: true
 
-  usestdlibvars:
-    # Suggest the use of http.MethodXX.
+  usetesting:
+    # Enable/disable `os.CreateTemp("", ...)` detections.
     # Default: true
-    http-method: true
-    # Suggest the use of http.StatusXX.
+    os-create-temp: true
+    # Enable/disable `os.MkdirTemp()` detections.
     # Default: true
-    http-status-code: true
-    # Suggest the use of time.Weekday.String().
+    os-mkdir-temp: true
+    # Enable/disable `os.Setenv()` detections.
     # Default: true
-    time-weekday: true
-    # Suggest the use of time.Month.String().
+    os-setenv: true
+    # Enable/disable `os.TempDir()` detections.
     # Default: false
-    time-month: true
-    # Suggest the use of time.Layout.
-    # Default: false
-    time-layout: true
-    # Suggest the use of crypto.Hash.String().
-    # Default: false
-    crypto-hash: true
-    # Suggest the use of rpc.DefaultXXPath.
-    # Default: false
-    default-rpc-path: true
-    # Suggest the use of os.DevNull.
-    # Default: false
-    os-dev-null: true
-    # Suggest the use of sql.LevelXX.String().
-    # Default: false
-    sql-isolation-level: true
-    # Suggest the use of tls.SignatureScheme.String().
-    # Default: false
-    tls-signature-scheme: true
-    # Suggest the use of constant.Kind.String().
-    # Default: false
-    constant-kind: true
-    # Suggest the use of syslog.Priority.
-    # Default: false
-    syslog-priority: true
+    os-temp-dir: true
+    # Enable/disable `os.Chdir()` detections.
+    # Disabled if Go < 1.24.
+    # Default: true
+    os-chdir: true
+    # Enable/disable `context.Background()` detections.
+    # Disabled if Go < 1.24.
+    # Default: true
+    context-background: true
+    # Enable/disable `context.TODO()` detections.
+    # Disabled if Go < 1.24.
+    # Default: true
+    context-todo: true
 
   wrapcheck:
     # An array of strings that specify substrings of signatures to ignore.
     # If this set, it will override the default set of ignored signatures.
     # See https://github.com/tomarrell/wrapcheck#configuration for more information.
     # Default: [".Errorf(", "errors.New(", "errors.Unwrap(", ".Wrap(", ".Wrapf(", ".WithMessage(", ".WithMessagef(", ".WithStack("]
-    ignoreSigs:
-      - errors.NewError(
-      - errors.FromSparkError(
+    # ignoreSigs:
+    #   - errors.New()
     # An array of strings that specify regular expressions of signatures to ignore.
     # Default: []
     # ignoreSigRegexps:

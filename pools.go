@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+//nolint:gochecknoglobals // reason: sync.Pools work best when globally shared.
 var (
 	poolDone = sync.Pool{
 		New: func() any {
@@ -20,19 +21,31 @@ var (
 
 	poolRpcRequestHeaders = sync.Pool{
 		New: func() any {
-			return &requestHeader{}
+			return &requestHeader{
+				HandleId:   0,
+				SequenceId: 0,
+			}
 		},
 	}
 
 	poolRpcResponseHeaders = sync.Pool{
 		New: func() any {
-			return &responseHeader{}
+			return &responseHeader{
+				HandleId:   0,
+				SequenceId: 0,
+				Error:      "",
+			}
 		},
 	}
 
 	poolCall = sync.Pool{
 		New: func() any {
-			return &call{}
+			return &call{
+				handleId: 0,
+				Req:      nil,
+				Res:      nil,
+				Err:      nil,
+			}
 		},
 	}
 )

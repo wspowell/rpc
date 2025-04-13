@@ -5,14 +5,14 @@ import (
 	"errors"
 	"log"
 	"net"
-	gorpc "net/rpc"
+	gorpc "net/rpc" //nolint:importas // reason: Import "net/rpc" for benchmark comparisons.
 	"sync"
 	"testing"
 
 	"github.com/wspowell/rpc"
 )
 
-// Codec: gob
+// Codec: gob.
 // goos: linux
 // goarch: amd64
 // pkg: diskey/pkg/server
@@ -21,7 +21,7 @@ import (
 // BenchmarkPing-8            	    7725	    157496 ns/op	    2480 B/op	      24 allocs/op
 // BenchmarkPing_parallel-8   	   35712	     34134 ns/op	    2478 B/op	      24 allocs/op
 
-// Codec: msgpack
+// Codec: msgpack.
 // goos: linux
 // goarch: amd64
 // pkg: diskey/pkg/server
@@ -60,6 +60,17 @@ import (
 // PASS
 // ok      diskey/pkg/rpc  4.625s
 
+// go test -timeout 30s -benchmem -bench=. -run ^$ ./
+// goos: linux
+// goarch: amd64
+// pkg: github.com/wspowell/rpc
+// cpu: AMD Ryzen 9 4900HS with Radeon Graphics
+// BenchmarkTest-8                     7603            137472 ns/op             515 B/op         16 allocs/op
+// BenchmarkPing-8                    10000            124340 ns/op             177 B/op          4 allocs/op
+// BenchmarkPing_parallel-8           39692             29686 ns/op             173 B/op          4 allocs/op
+// PASS
+// ok      github.com/wspowell/rpc 4.471s
+
 type Args struct {
 	A, B int
 }
@@ -70,12 +81,12 @@ type Quotient struct {
 
 type Arith int
 
-func (t *Arith) Multiply(args *Args, reply *int) error {
+func (_ *Arith) Multiply(args *Args, reply *int) error {
 	*reply = args.A * args.B
 	return nil
 }
 
-func (t *Arith) Divide(args *Args, quo *Quotient) error {
+func (_ *Arith) Divide(args *Args, quo *Quotient) error {
 	if args.B == 0 {
 		return errors.New("divide by zero")
 	}
@@ -123,81 +134,46 @@ func BenchmarkTest(b *testing.B) {
 		}
 	}
 	b.StopTimer()
-	// fmt.Printf("Arith: %d*%d=%d", args.A, args.B, reply)
 }
 
 var (
-	testServer *rpc.Server
-	testClient *rpc.Client
+	_testServer *rpc.Server
+	_testClient *rpc.Client
 
-	pingHandler = rpc.NewHandle[struct{}, bool](1)
+	_pingHandler = rpc.NewHandle[struct{}, bool](1)
 )
 
 func init() {
 	ctx := context.Background()
 	port := "7100"
 
-	testServer = rpc.NewServer("localhost", port)
+	_testServer = rpc.NewServer("localhost", port)
 
-	pingHandler.SetHandler(testServer.Ping)
-	pingHandler.RegisterServer(testServer)
+	_pingHandler.SetHandler(_testServer.Ping)
+	_pingHandler.RegisterServer(_testServer)
 
-	listener, listenErr := testServer.Listen(ctx)
+	listener, listenErr := _testServer.ListenTcp(ctx)
 	if listenErr != nil {
 		panic(listenErr)
 	}
 
-	go testServer.AcceptConnections(listener)
+	go _testServer.AcceptTcpConnections(listener)
 
-	testClient = rpc.NewClient("localhost", port)
-	if connectErr := testClient.Connect(); connectErr != nil {
+	_testClient = rpc.NewClient("localhost", port)
+	if connectErr := _testClient.Connect(); connectErr != nil {
 		panic(connectErr)
 	}
 }
 
 func BenchmarkPing(b *testing.B) {
-	// ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
-
-	// // Start CPU profiling
-	// fileCpu, err := os.Create("cpu.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fileGoroutine, err := os.Create("goroutine.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fileHeap, err := os.Create("heap.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fileAllocs, err := os.Create("allocs.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fileThreadcreate, err := os.Create("threadcreate.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fileBlock, err := os.Create("block.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fileMutex, err := os.Create("mutex.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	if testClient == nil {
+	if _testClient == nil {
 		panic("client is nil")
 	}
 
-	// pprof.StartCPUProfile(fileCpu)
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		result, err := pingHandler.Call(testClient, struct{}{})
+	for range b.N {
+		result, err := _pingHandler.Call(_testClient, struct{}{})
 		if err != nil {
 			panic(err)
 		}
@@ -208,32 +184,14 @@ func BenchmarkPing(b *testing.B) {
 	}
 
 	b.StopTimer()
-	// pprof.StopCPUProfile()
-	// pprof.Lookup("goroutine").WriteTo(fileGoroutine, 0)
-	// pprof.Lookup("heap").WriteTo(fileHeap, 0)
-	// pprof.Lookup("allocs").WriteTo(fileAllocs, 0)
-	// pprof.Lookup("threadcreate").WriteTo(fileThreadcreate, 0)
-	// pprof.Lookup("block").WriteTo(fileBlock, 0)
-	// pprof.Lookup("mutex").WriteTo(fileMutex, 0)
 }
 
 func BenchmarkPing_parallel(b *testing.B) {
-	// ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
-
-	// // Start CPU profiling
-	// f, err := os.Create("cpu.pprof")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// pprof.StartCPUProfile(f)
-	// defer pprof.StopCPUProfile()
-
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			result, err := pingHandler.Call(testClient, struct{}{})
+			result, err := _pingHandler.Call(_testClient, struct{}{})
 			if err != nil {
 				panic(err)
 			}

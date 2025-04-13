@@ -1,7 +1,6 @@
 package rpc_test
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -16,7 +15,7 @@ import (
 func Test_Server_Handler(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	port := "7000"
 
@@ -31,23 +30,23 @@ func Test_Server_Handler(t *testing.T) {
 	testExtension.SetHandler(extHandler)
 	testExtension.RegisterServer(testServer)
 
-	listener, listenErr := testServer.Listen(ctx)
+	listener, listenErr := testServer.ListenTcp(ctx)
 	require.NoError(t, listenErr)
 
-	go testServer.AcceptConnections(listener)
+	go testServer.AcceptTcpConnections(listener)
 
 	testClient := rpc.NewClient("localhost", port)
 	connectErr := testClient.Connect()
 	require.NoError(t, connectErr)
 
-	// Test Case: ping
+	// Test Case: ping.
 	{
 		response, err := pingHandler.Call(testClient, struct{}{})
 		require.NoError(t, err)
-		assert.Equal(t, true, response)
+		assert.True(t, response)
 	}
 
-	// Test Case: extension
+	// Test Case: extension.
 	{
 		response, err := testExtension.Call(testClient, testHandlerArgs{
 			Input: "test",
@@ -88,7 +87,7 @@ func extHandler(req testHandlerArgs) (testHandlerReply, error) {
 func Test_Server_close(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	port := "7001"
 
@@ -101,10 +100,10 @@ func Test_Server_close(t *testing.T) {
 		pingHandler.SetHandler(testServer.Ping)
 		pingHandler.RegisterServer(testServer)
 
-		listener, listenErr := testServer.Listen(ctx)
+		listener, listenErr := testServer.ListenTcp(ctx)
 		require.NoError(t, listenErr)
 
-		go testServer.AcceptConnections(listener)
+		go testServer.AcceptTcpConnections(listener)
 
 		testClient := rpc.NewClient("localhost", port)
 		connectErr := testClient.Connect()
@@ -114,9 +113,12 @@ func Test_Server_close(t *testing.T) {
 		require.NoError(t, err)
 
 		waitGroup.Add(1)
+
 		go func() {
 			defer waitGroup.Done()
-			_, _ = pingHandler.Call(testClient, struct{}{})
+
+			_, pingErr := pingHandler.Call(testClient, struct{}{})
+			assert.NoError(t, pingErr)
 		}()
 
 		testServer.Close()
@@ -129,10 +131,10 @@ func Test_Server_close(t *testing.T) {
 		pingHandler.SetHandler(testServer.Ping)
 		pingHandler.RegisterServer(testServer)
 
-		listener, listenErr := testServer.Listen(ctx)
+		listener, listenErr := testServer.ListenTcp(ctx)
 		require.NoError(t, listenErr)
 
-		go testServer.AcceptConnections(listener)
+		go testServer.AcceptTcpConnections(listener)
 
 		testClient := rpc.NewClient("localhost", port)
 		connectErr := testClient.Connect()
@@ -142,9 +144,12 @@ func Test_Server_close(t *testing.T) {
 		require.NoError(t, err)
 
 		waitGroup.Add(1)
+
 		go func() {
 			defer waitGroup.Done()
-			_, _ = pingHandler.Call(testClient, struct{}{})
+
+			_, pingErr := pingHandler.Call(testClient, struct{}{})
+			assert.NoError(t, pingErr)
 		}()
 
 		testServer.Close()
@@ -156,7 +161,7 @@ func Test_Server_close(t *testing.T) {
 func Test_Server_error(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	port := "7002"
 
@@ -166,10 +171,10 @@ func Test_Server_error(t *testing.T) {
 	testExtension.SetHandler(extHandler)
 	testExtension.RegisterServer(testServer)
 
-	listener, listenErr := testServer.Listen(ctx)
+	listener, listenErr := testServer.ListenTcp(ctx)
 	require.NoError(t, listenErr)
 
-	go testServer.AcceptConnections(listener)
+	go testServer.AcceptTcpConnections(listener)
 
 	testClient := rpc.NewClient("localhost", port)
 	connectErr := testClient.Connect()

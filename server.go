@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -9,24 +10,32 @@ import (
 	"time"
 )
 
-type ServerCodec interface {
-	ReadRequestHeader(*requestHeader) error
-	ReadRequestBody(any) error
-	WriteResponse(*responseHeader, any) error
+var (
+	ErrHandleNotRegistered = errors.New("handle not registered")
+	ErrListenerInvalid     = errors.New("invalid listener")
+)
 
+type ServerCodec interface {
+	// ReadRequestHeader from the connection.
+	ReadRequestHeader(reqHeader *requestHeader) error
+	// ReadRequestBody from the connection.
+	ReadRequestBody(reqBody any) error
+	// WriteResponse to the connection.
+	WriteResponse(resHeader *responseHeader, resBody any) error
+
+	// Close the connection.
 	// Close can be called multiple times and must be idempotent.
 	Close() error
 }
 
 type Server struct {
-	handlerFns      map[uint64]serverHandleFunc
 	netListener     net.Listener
+	handlerFns      map[uint64]serverHandleFunc
+	cancelFn        context.CancelFunc
 	host            string
 	port            string
 	address         string
 	keepAlive       time.Duration
-	commandTimeout  time.Duration
-	cancelFn        context.CancelFunc
 	openConnections sync.WaitGroup
 }
 
@@ -36,7 +45,6 @@ func NewServer(host string, port string) *Server {
 		port:            port,
 		address:         host + ":" + port,
 		keepAlive:       defaultKeepAlivePeriod,
-		commandTimeout:  defaultCommandTimeout,
 		handlerFns:      map[uint64]serverHandleFunc{},
 		cancelFn:        nil,
 		openConnections: sync.WaitGroup{},
@@ -44,18 +52,23 @@ func NewServer(host string, port string) *Server {
 	}
 }
 
-func (self *Server) Close() {
+func (self *Server) Close() error {
+	var err error
+
 	if self.netListener != nil {
-		_ = self.netListener.Close()
+		err = self.netListener.Close()
 		self.netListener = nil
 	}
 
 	if self.cancelFn != nil {
 		self.cancelFn()
+
 		self.cancelFn = nil
 	}
 
 	self.openConnections.Wait()
+
+	return err
 }
 
 func (_ *Server) Ping(struct{}) (bool, error) {
@@ -82,61 +95,69 @@ type serverResponse struct {
 	handleId     uint64
 }
 
-func (self *Server) Listen(ctx context.Context) (net.Listener, error) {
+func (self *Server) ListenTcp(ctx context.Context) (*net.TCPListener, error) {
 	ctx, cancelFn := context.WithCancel(ctx)
 	self.cancelFn = cancelFn
 
 	listenConfig := &net.ListenConfig{
 		Control:   nil,
 		KeepAlive: self.keepAlive,
+		KeepAliveConfig: net.KeepAliveConfig{
+			Enable:   true,
+			Idle:     15 * time.Second, //nolint:mnd,revive // reason: This is the default value.
+			Interval: 15 * time.Second, //nolint:mnd,revive // reason: This is the default value.
+			Count:    9,                //nolint:mnd,revive // reason: This is the default value.
+		},
 	}
 
-	netListener, err := listenConfig.Listen(ctx, "tcp", self.address)
+	netListener, err := listenConfig.Listen(ctx, connTypeTcp, self.address)
 	if err != nil {
 		return nil, err
 	}
 
-	return netListener, nil
+	if asTcpListener, ok := netListener.(*net.TCPListener); ok {
+		return asTcpListener, nil
+	}
+
+	return nil, fmt.Errorf("%w: listener is not a *net.TCPListener", ErrListenerInvalid)
 }
 
-func (self *Server) AcceptConnections(netListener net.Listener) {
-	self.netListener = netListener
+func (self *Server) AcceptTcpConnections(tcpListener *net.TCPListener) {
+	self.netListener = tcpListener
 
-	var connectionId uint64
-	var netConnection net.Conn
+	var tcpConnection *net.TCPConn
+
 	var err error
 
-	netConnections := []net.Conn{}
+	var netConnections []net.Conn //nolint:prealloc // reason: Cannot prealloc when we do not know how many connections we may have.
+
 	for {
-		netConnection, err = netListener.Accept()
+		tcpConnection, err = tcpListener.AcceptTCP()
 		if err != nil {
 			break
 		}
 
-		netConnections = append(netConnections, netConnection)
+		netConnections = append(netConnections, tcpConnection)
 
-		asTcpConnection, ok := netConnection.(*net.TCPConn)
-		if !ok {
+		if keepAliveErr := tcpConnection.SetKeepAlive(true); keepAliveErr != nil {
 			continue
 		}
 
-		connectionId++
-
-		if keepAliveErr := asTcpConnection.SetKeepAlive(true); keepAliveErr != nil {
-			continue
-		}
-		if keepAliveErr := asTcpConnection.SetKeepAlivePeriod(defaultKeepAlivePeriod); keepAliveErr != nil {
-			continue
-		}
-		if keepAliveErr := asTcpConnection.SetNoDelay(false); keepAliveErr != nil {
+		if keepAliveErr := tcpConnection.SetKeepAlivePeriod(defaultKeepAlivePeriod); keepAliveErr != nil {
 			continue
 		}
 
-		go self.ServeCodec(NewServerCodecMsgpack(asTcpConnection))
+		if keepAliveErr := tcpConnection.SetNoDelay(false); keepAliveErr != nil {
+			continue
+		}
+
+		go self.ServeCodec(NewServerCodecMsgpack(tcpConnection))
 	}
 
 	for index := range netConnections {
 		_ = netConnections[index].Close()
+		netConnections[index] = netConnections[len(netConnections)-1]
+		netConnections = netConnections[:len(netConnections)-1]
 	}
 }
 
@@ -149,11 +170,14 @@ func (self *Server) ServeCodec(codec ServerCodec) {
 	for {
 		reqHeader := acquireRpcRequestHeader()
 		if err := codec.ReadRequestHeader(reqHeader); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				releaseRpcRequestHeader(reqHeader)
+
 				break
 			}
+
 			releaseRpcRequestHeader(reqHeader)
+
 			break
 		}
 
@@ -170,8 +194,8 @@ func (self *Server) ServeCodec(codec ServerCodec) {
 			waitGroup.Add(1)
 			handleFn(codec, pendingResponses, pendingResponse, waitGroup)
 		} else {
-			// Discard body
-			_ = codec.ReadRequestBody(nil)
+			// Discard body.
+			_ = codec.ReadRequestBody(nil) //nolint:errcheck // reason: We just want to discard the body so ignore the error.
 
 			waitGroup.Add(1)
 
@@ -179,7 +203,7 @@ func (self *Server) ServeCodec(codec ServerCodec) {
 				handleId:     reqHeader.HandleId,
 				sequenceId:   reqHeader.SequenceId,
 				responseBody: struct{}{},
-				callErr:      fmt.Errorf("handle not registered"),
+				callErr:      ErrHandleNotRegistered,
 				err:          nil,
 			}
 
@@ -213,7 +237,10 @@ func processResponses(codec ServerCodec, pendingResponses <-chan serverResponse)
 				resHeader.Error = pendingResponse.err.Error()
 			}
 
-			_ = codec.WriteResponse(resHeader, pendingResponse.responseBody)
+			if err := codec.WriteResponse(resHeader, pendingResponse.responseBody); err != nil {
+				// TODO: Log the error better.
+				panic(fmt.Sprintf("error writing response: %s", err))
+			}
 
 			releaseRpcResponseHeader(resHeader)
 		}

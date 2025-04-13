@@ -7,3 +7,7 @@ bench-test:
 
 bench:
 	go test -timeout 30s -benchmem -bench=. -run ^$$ ./
+
+lint:
+	golangci-lint cache clean
+	golangci-lint run

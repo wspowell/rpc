@@ -1,21 +1,37 @@
 package rpc
 
 import (
-	"fmt"
+	"errors"
 	"io"
 	"net"
 	"time"
 )
 
 const (
+	connTypeTcp = "tcp"
+
 	defaultCommandTimeout  = 3 * time.Second
 	defaultKeepAlivePeriod = 10 * time.Second
 )
 
 var (
-	ErrTimeout  = fmt.Errorf("command timed out")
-	ErrShutdown = fmt.Errorf("connection is shut down")
+	ErrTimeout         = errors.New("command timed out")
+	ErrShutdown        = errors.New("connection is shut down")
+	ErrInvalidHandleId = errors.New("handle id cannot be 0")
 )
+
+type clientRequest struct {
+	done       chan error
+	cmd        *call
+	sequenceId uint64
+}
+
+type clientResponse struct {
+	err        error
+	callErr    error
+	replyBytes []byte
+	sequenceId uint64
+}
 
 // A ClientCodec implements writing of RPC requests and
 // reading of RPC responses for the client side of an RPC session.
@@ -27,14 +43,20 @@ var (
 // discarded.
 // See [NewClient]'s comment for information about concurrent access.
 type ClientCodec interface {
-	WriteRequest(*requestHeader, any) error
-	ReadResponseHeader(*responseHeader) error
-	ReadResponseBody(any) error
+	// WriteRequest to connection.
+	WriteRequest(reqHeader *requestHeader, reqBody any) error
+	// ReadResponseHeader from the connection.
+	ReadResponseHeader(resHeader *responseHeader) error
+	// ReadResponseBody from the connection.
+	ReadResponseBody(resBody any) error
 
+	// Close the underlying connection.
 	Close() error
 
+	// ReadRawResponseBody to avoid unmarshaling data prematurely.
 	ReadRawResponseBody() ([]byte, error)
-	Unmarshal(data []byte, v any) error
+	// Unmarshal data into a value using the underlying codec's method.
+	Unmarshal(data []byte, value any) error
 }
 
 type Client struct {
@@ -57,22 +79,20 @@ func NewClient(host string, port string) *Client {
 		commandTimeout:   defaultCommandTimeout,
 		pendingRequests:  make(chan clientRequest),
 		pendingResponses: make(chan clientResponse),
+		rpcCodec:         nil,
 	}
 }
 
-func NewWithConnection(tcpConnection *net.TCPConn) *Client {
-	return &Client{
-		address:        tcpConnection.RemoteAddr().String(),
-		tcpConnection:  tcpConnection,
-		commandTimeout: defaultCommandTimeout,
+func (self *Client) Close() error {
+	if self.tcpConnection == nil {
+		return nil
 	}
-}
 
-func (self *Client) Close() {
-	if self.tcpConnection != nil {
-		_ = self.tcpConnection.Close()
-		self.tcpConnection = nil
-	}
+	err := self.tcpConnection.Close()
+
+	self.tcpConnection = nil
+
+	return err
 }
 
 func (self *Client) Host() string {
@@ -88,25 +108,14 @@ func (self *Client) Address() string {
 }
 
 func (self *Client) Connect() error {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", self.address)
-	if err != nil {
+	if tcpConnection, err := openTcpConnectionToAddress(self.address); err != nil {
 		return err
+	} else {
+		self.tcpConnection = tcpConnection
 	}
 
-	tcpConnection, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		return err
-	}
-
-	self.tcpConnection = tcpConnection
-	if keepAliveErr := self.tcpConnection.SetKeepAlive(true); keepAliveErr != nil {
-		return keepAliveErr
-	}
-	if keepAliveErr := self.tcpConnection.SetKeepAlivePeriod(defaultKeepAlivePeriod); keepAliveErr != nil {
-		return keepAliveErr
-	}
-	if keepAliveErr := self.tcpConnection.SetNoDelay(false); keepAliveErr != nil {
-		return keepAliveErr
+	if connSettingErr := setTcpConnectionSettings(self.tcpConnection); connSettingErr != nil {
+		return connSettingErr
 	}
 
 	self.rpcCodec = newClientCodecMsgpack(self.tcpConnection)
@@ -115,6 +124,27 @@ func (self *Client) Connect() error {
 	go self.processCommandResponses()
 
 	return nil
+}
+
+func openTcpConnectionToAddress(address string) (*net.TCPConn, error) {
+	tcpAddr, err := net.ResolveTCPAddr(connTypeTcp, address)
+	if err != nil {
+		return nil, err
+	}
+
+	return net.DialTCP(connTypeTcp, nil, tcpAddr)
+}
+
+func setTcpConnectionSettings(tcpConnection *net.TCPConn) error {
+	if keepAliveErr := tcpConnection.SetKeepAlive(true); keepAliveErr != nil {
+		return keepAliveErr
+	}
+
+	if keepAlivePeriodErr := tcpConnection.SetKeepAlivePeriod(defaultKeepAlivePeriod); keepAlivePeriodErr != nil {
+		return keepAlivePeriodErr
+	}
+
+	return tcpConnection.SetNoDelay(false)
 }
 
 func (self *Client) send(cmd *call) error {
@@ -127,7 +157,7 @@ func (self *Client) send(cmd *call) error {
 	}
 
 	if cmd.handleId == 0 {
-		return fmt.Errorf("handle id cannot be 0")
+		return ErrInvalidHandleId
 	}
 
 	timeout := acquireTimeoutTicker(self.commandTimeout)
@@ -136,8 +166,9 @@ func (self *Client) send(cmd *call) error {
 
 	select {
 	case self.pendingRequests <- clientRequest{
-		cmd:  cmd,
-		done: done,
+		sequenceId: 0, // Sequence ID is assigned later.
+		cmd:        cmd,
+		done:       done,
 	}:
 	case <-timeout.C:
 		releaseTimeoutTicker(timeout)
@@ -149,6 +180,7 @@ func (self *Client) send(cmd *call) error {
 	case err := <-done:
 		releaseTimeoutTicker(timeout)
 		releaseDone(done)
+
 		return err
 	case <-timeout.C:
 		releaseTimeoutTicker(timeout)
@@ -159,6 +191,7 @@ func (self *Client) send(cmd *call) error {
 
 func (self *Client) processPendingCommands() {
 	requestsInFlight := map[uint64]clientRequest{}
+
 	var nextSequenceId uint64
 
 	defer func() {
@@ -192,7 +225,7 @@ func (self *Client) processPendingCommands() {
 				return
 			}
 
-			if pendingResponse.callErr == io.EOF {
+			if errors.Is(pendingResponse.callErr, io.EOF) {
 				// Connection is closed.
 				return
 			}
@@ -206,37 +239,20 @@ func (self *Client) processPendingCommands() {
 			delete(requestsInFlight, pendingResponse.sequenceId)
 			// Only bother with the Unmarshal if there was no error and if there was actually a response body to process.
 			if pendingResponse.err == nil && pendingResponse.callErr == nil && len(pendingResponse.replyBytes) != 0 {
-				if err := self.rpcCodec.Unmarshal(pendingResponse.replyBytes, pendingRequest.cmd.Res); err != nil {
-					pendingResponse.callErr = err
-				} else {
-					pendingResponse.callErr = nil
-				}
+				pendingResponse.callErr = self.rpcCodec.Unmarshal(pendingResponse.replyBytes, pendingRequest.cmd.Res)
 			}
 
-			if pendingResponse.callErr != nil {
+			switch {
+			case pendingResponse.callErr != nil:
 				pendingRequest.done <- pendingResponse.callErr
-			} else if pendingResponse.err != nil {
+			case pendingResponse.err != nil:
 				pendingRequest.done <- pendingResponse.err
-			} else {
+			default:
 				pendingRequest.done <- nil
 			}
-
 			// Do not close "done" since it is handed back to a sync.Pool.
 		}
 	}
-}
-
-type clientRequest struct {
-	done       chan error
-	cmd        *call
-	sequenceId uint64
-}
-
-type clientResponse struct {
-	err        error
-	callErr    error
-	replyBytes []byte
-	sequenceId uint64
 }
 
 func (self *Client) processCommandResponses() {
@@ -245,6 +261,7 @@ func (self *Client) processCommandResponses() {
 		if err := self.rpcCodec.ReadResponseHeader(resHeader); err != nil {
 			releaseRpcResponseHeader(resHeader)
 			close(self.pendingResponses)
+
 			return
 		}
 
@@ -254,13 +271,15 @@ func (self *Client) processCommandResponses() {
 			err:        nil,
 			callErr:    nil,
 		}
+
 		switch {
 		case resHeader.Error != "":
 			// We've got an error response. Give this to the request;
 			// any subsequent requests will get the ReadResponseBody
 			// error if there is one.
-			response.err = fmt.Errorf("%s", resHeader.Error)
-			_ = self.rpcCodec.ReadResponseBody(nil)
+			response.err = errors.New(resHeader.Error) //nolint:err113 // reason: This is creating a brand new dynamic error from a response, so this is fine.
+			// Discard the response body.
+			_ = self.rpcCodec.ReadResponseBody(nil) //nolint:errcheck // reason: We always want to respond with the header error so ignore this error.
 		default:
 			response.replyBytes, response.callErr = self.rpcCodec.ReadRawResponseBody()
 		}

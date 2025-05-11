@@ -71,6 +71,17 @@ import (
 // PASS
 // ok      github.com/wspowell/rpc 4.471s
 
+// go test -timeout 30s -benchmem -bench=. -run ^$ ./
+// goos: linux
+// goarch: amd64
+// pkg: github.com/wspowell/rpc
+// cpu: AMD Ryzen 9 4900HS with Radeon Graphics
+// BenchmarkGorpcBaseline-8            8725            124840 ns/op             514 B/op         16 allocs/op
+// BenchmarkTcpPing-8                  8335            124356 ns/op             177 B/op          4 allocs/op
+// BenchmarkTcpPing_parallel-8        37846             30092 ns/op             174 B/op          4 allocs/op
+// PASS
+// ok      github.com/wspowell/rpc 4.099s
+
 type Args struct {
 	A, B int
 }
@@ -97,7 +108,7 @@ func (_ *Arith) Divide(args *Args, quo *Quotient) error {
 
 var registerOnce = &sync.Once{}
 
-func BenchmarkTest(b *testing.B) {
+func BenchmarkGorpcBaseline(b *testing.B) {
 	arith := new(Arith)
 
 	registerOnce.Do(func() {
@@ -165,7 +176,7 @@ func init() {
 	}
 }
 
-func BenchmarkPing(b *testing.B) {
+func BenchmarkTcpPing(b *testing.B) {
 	if _testClient == nil {
 		panic("client is nil")
 	}
@@ -186,7 +197,7 @@ func BenchmarkPing(b *testing.B) {
 	b.StopTimer()
 }
 
-func BenchmarkPing_parallel(b *testing.B) {
+func BenchmarkTcpPing_parallel(b *testing.B) {
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {

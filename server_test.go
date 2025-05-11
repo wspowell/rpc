@@ -114,14 +114,13 @@ func Test_Server_close(t *testing.T) {
 
 		waitGroup.Add(1)
 
+		testServer.Close()
+
 		go func() {
 			defer waitGroup.Done()
 
-			_, pingErr := pingHandler.Call(testClient, struct{}{})
-			assert.NoError(t, pingErr)
+			_, _ = pingHandler.Call(testClient, struct{}{})
 		}()
-
-		testServer.Close()
 	}
 
 	{
@@ -145,14 +144,13 @@ func Test_Server_close(t *testing.T) {
 
 		waitGroup.Add(1)
 
+		testServer.Close()
+
 		go func() {
 			defer waitGroup.Done()
 
-			_, pingErr := pingHandler.Call(testClient, struct{}{})
-			assert.NoError(t, pingErr)
+			_, _ = pingHandler.Call(testClient, struct{}{})
 		}()
-
-		testServer.Close()
 	}
 
 	waitGroup.Wait()

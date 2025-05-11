@@ -15,19 +15,19 @@ type clientCodecMsgpack struct {
 }
 
 func newClientCodecMsgpack(conn io.ReadWriteCloser) clientCodecMsgpack {
-	buf := bufio.NewWriter(conn)
+	buffer := bufio.NewWriter(conn)
 
 	decoder := msgpack.NewDecoder(conn)
 	decoder.UsePreallocateValues(true)
 	decoder.DisableAllocLimit(true)
 
-	encoder := msgpack.NewEncoder(buf)
+	encoder := msgpack.NewEncoder(buffer)
 
 	return clientCodecMsgpack{
 		conn:         conn,
 		decoder:      decoder,
 		encoder:      encoder,
-		encodeBuffer: buf,
+		encodeBuffer: buffer,
 	}
 }
 

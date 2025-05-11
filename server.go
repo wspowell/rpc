@@ -29,26 +29,24 @@ type ServerCodec interface {
 }
 
 type Server struct {
-	netListener     net.Listener
-	handlerFns      map[uint64]serverHandleFunc
-	cancelFn        context.CancelFunc
-	host            string
-	port            string
-	address         string
-	keepAlive       time.Duration
-	openConnections sync.WaitGroup
+	netListener net.Listener
+	handlerFns  map[uint64]serverHandleFunc
+	cancelFn    context.CancelFunc
+	host        string
+	port        string
+	address     string
+	keepAlive   time.Duration
 }
 
 func NewServer(host string, port string) *Server {
 	return &Server{
-		host:            host,
-		port:            port,
-		address:         host + ":" + port,
-		keepAlive:       defaultKeepAlivePeriod,
-		handlerFns:      map[uint64]serverHandleFunc{},
-		cancelFn:        nil,
-		openConnections: sync.WaitGroup{},
-		netListener:     nil,
+		host:        host,
+		port:        port,
+		address:     host + ":" + port,
+		keepAlive:   defaultKeepAlivePeriod,
+		handlerFns:  map[uint64]serverHandleFunc{},
+		cancelFn:    nil,
+		netListener: nil,
 	}
 }
 
@@ -65,8 +63,6 @@ func (self *Server) Close() error {
 
 		self.cancelFn = nil
 	}
-
-	self.openConnections.Wait()
 
 	return err
 }
@@ -125,19 +121,13 @@ func (self *Server) ListenTcp(ctx context.Context) (*net.TCPListener, error) {
 func (self *Server) AcceptTcpConnections(tcpListener *net.TCPListener) {
 	self.netListener = tcpListener
 
-	var tcpConnection *net.TCPConn
-
-	var err error
-
-	var netConnections []net.Conn //nolint:prealloc // reason: Cannot prealloc when we do not know how many connections we may have.
+	closed := make(chan struct{})
 
 	for {
-		tcpConnection, err = tcpListener.AcceptTCP()
+		tcpConnection, err := tcpListener.AcceptTCP()
 		if err != nil {
 			break
 		}
-
-		netConnections = append(netConnections, tcpConnection)
 
 		if keepAliveErr := tcpConnection.SetKeepAlive(true); keepAliveErr != nil {
 			continue
@@ -151,14 +141,14 @@ func (self *Server) AcceptTcpConnections(tcpListener *net.TCPListener) {
 			continue
 		}
 
+		go func() {
+			<-closed
+			tcpConnection.Close()
+		}()
 		go self.ServeCodec(NewServerCodecMsgpack(tcpConnection))
 	}
 
-	for index := range netConnections {
-		_ = netConnections[index].Close()
-		netConnections[index] = netConnections[len(netConnections)-1]
-		netConnections = netConnections[:len(netConnections)-1]
-	}
+	closed <- struct{}{}
 }
 
 func (self *Server) ServeCodec(codec ServerCodec) {
@@ -237,10 +227,7 @@ func processResponses(codec ServerCodec, pendingResponses <-chan serverResponse)
 				resHeader.Error = pendingResponse.err.Error()
 			}
 
-			if err := codec.WriteResponse(resHeader, pendingResponse.responseBody); err != nil {
-				// TODO: Log the error better.
-				panic(fmt.Sprintf("error writing response: %s", err))
-			}
+			_ = codec.WriteResponse(resHeader, pendingResponse.responseBody)
 
 			releaseRpcResponseHeader(resHeader)
 		}

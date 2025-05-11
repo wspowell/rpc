@@ -16,13 +16,13 @@ type ServerCodecMsgpack struct {
 }
 
 func NewServerCodecMsgpack(conn io.ReadWriteCloser) *ServerCodecMsgpack {
-	buf := bufio.NewWriter(conn)
+	buffer := bufio.NewWriter(conn)
 
 	return &ServerCodecMsgpack{
 		conn:         conn,
 		decoder:      msgpack.NewDecoder(conn),
-		encoder:      msgpack.NewEncoder(buf),
-		encodeBuffer: buf,
+		encoder:      msgpack.NewEncoder(buffer),
+		encodeBuffer: buffer,
 		closed:       false,
 	}
 }

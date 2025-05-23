@@ -30,7 +30,7 @@ type ServerCodec interface {
 
 type Server struct {
 	netListener net.Listener
-	handlerFns  map[uint64]serverHandleFunc
+	handlerFns  map[handleIdType]serverHandleFunc
 	cancelFn    context.CancelFunc
 	host        string
 	port        string
@@ -44,7 +44,7 @@ func NewServer(host string, port string) *Server {
 		port:        port,
 		address:     host + ":" + port,
 		keepAlive:   defaultKeepAlivePeriod,
-		handlerFns:  map[uint64]serverHandleFunc{},
+		handlerFns:  map[handleIdType]serverHandleFunc{},
 		cancelFn:    nil,
 		netListener: nil,
 	}
@@ -87,8 +87,8 @@ type serverResponse struct {
 	err          error
 	callErr      error
 	responseBody any
-	sequenceId   uint64
-	handleId     uint64
+	sequenceId   sequenceIdType
+	handleId     handleIdType
 }
 
 func (self *Server) ListenTcp(ctx context.Context) (*net.TCPListener, error) {

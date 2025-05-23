@@ -23,14 +23,14 @@ var (
 type clientRequest struct {
 	done       chan error
 	cmd        *call
-	sequenceId uint64
+	sequenceId sequenceIdType
 }
 
 type clientResponse struct {
 	err        error
 	callErr    error
 	replyBytes []byte
-	sequenceId uint64
+	sequenceId sequenceIdType
 }
 
 // A ClientCodec implements writing of RPC requests and
@@ -190,9 +190,9 @@ func (self *Client) send(cmd *call) error {
 }
 
 func (self *Client) processPendingCommands() {
-	requestsInFlight := map[uint64]clientRequest{}
+	requestsInFlight := map[sequenceIdType]clientRequest{}
 
-	var nextSequenceId uint64
+	var nextSequenceId sequenceIdType
 
 	defer func() {
 		for index := range requestsInFlight {

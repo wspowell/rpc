@@ -8,14 +8,19 @@ import (
 
 var ErrHandlerNotImplemented = errors.New("not implemented: call SetHandler()")
 
+type (
+	sequenceIdType uint64
+	handleIdType   uint64
+)
+
 type call struct {
 	Req      any
 	Res      any
 	Err      error
-	handleId uint64
+	handleId handleIdType
 }
 
-func (self *call) reset(handleId uint64, req any, res any) {
+func (self *call) reset(handleId handleIdType, req any, res any) {
 	self.handleId = handleId
 	self.Req = req
 	self.Res = res
@@ -26,17 +31,17 @@ func (self *call) reset(handleId uint64, req any, res any) {
 // but documented here as an aid to debugging, such as when analyzing
 // network traffic.
 type requestHeader struct {
-	HandleId   uint64
-	SequenceId uint64 // Sequence number chosen by client.
+	HandleId   handleIdType
+	SequenceId sequenceIdType // Sequence number chosen by client.
 }
 
 // responseHeader is a header written before every RPC return. It is used internally
 // but documented here as an aid to debugging, such as when analyzing
 // network traffic.
 type responseHeader struct {
-	Error      string // Error, if any.
-	HandleId   uint64 // Echoes that of the request header.
-	SequenceId uint64 // Echoes that of the request header.
+	Error      string         // Error, if any.
+	HandleId   handleIdType   // Echoes that of the request header.
+	SequenceId sequenceIdType // Echoes that of the request header.
 }
 
 type serverHandleFunc func(
@@ -49,10 +54,10 @@ type serverHandleFunc func(
 type Handle[Req any, Res any] struct {
 	handleFn func(Req) (Res, error)
 	Call     func(*Client, Req) (Res, error)
-	handleId uint64
+	handleId handleIdType
 }
 
-func NewHandle[Req any, Res any](handleId uint64) *Handle[Req, Res] {
+func NewHandle[Req any, Res any](handleId handleIdType) *Handle[Req, Res] {
 	return &Handle[Req, Res]{
 		handleId: handleId,
 		handleFn: func(Req) (Res, error) {
